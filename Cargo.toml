@@ -1,0 +1,32 @@
+[package]
+name = "proton_sandboxed"
+version = "0.1.0"
+edition = "2024"
+# Edition 2024's own minimum; nothing here needs more.
+rust-version = "1.85"
+description = "Run a Windows game through Proton, outside Steam, in a sandbox that keeps it to its own folders"
+license = "GPL-3.0-only"
+
+[features]
+default = ["cli"]
+# The command-line front end: clap, and terminal_choice's numbered menu for picking among the
+# prefixes other launchers made. Library users can opt out with `default-features = false`.
+cli = ["dep:clap", "dep:terminal_choice"]
+
+[[bin]]
+name = "proton_sandboxed"
+path = "src/main.rs"
+required-features = ["cli"]
+
+# Runs the binary, which only a `cli` build has.
+[[test]]
+name = "cli"
+required-features = ["cli"]
+
+[dependencies]
+clap = { version = "4.6.7", features = ["derive"], optional = true }
+# CRC-32, which names each game's own folder after where the game is.
+crc32fast = "1"
+# prctl, which puts the syscall filter in place.
+libc = "0.2"
+terminal_choice = { git = "https://github.com/SirHexa10t/terminal_choice.git", branch = "main", optional = true }
