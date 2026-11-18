@@ -1,7 +1,6 @@
-# proton_sandboxed
+# win_ter - proton sandboxed
 
-Runs a Windows game through Proton — no Steam needed — inside a sandbox that keeps it to its own
-folders.
+Easily run a Windows app through your terminal. Uses Proton (no Steam needed) inside a sandbox.
 
 ```sh
 proton_sandboxed game.exe                      # the newest Proton, on Wayland, no network
