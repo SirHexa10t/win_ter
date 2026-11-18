@@ -1,5 +1,5 @@
 [package]
-name = "proton_sandboxed"
+name = "win_ter"
 version = "0.1.0"
 edition = "2024"
 # Edition 2024's own minimum; nothing here needs more.
@@ -14,7 +14,7 @@ default = ["cli"]
 cli = ["dep:clap", "dep:terminal_choice"]
 
 [[bin]]
-name = "proton_sandboxed"
+name = "win_ter"
 path = "src/main.rs"
 required-features = ["cli"]
 

@@ -14,7 +14,7 @@
 //!
 //! That first step is the running program started again inside the sandbox: a program embedding
 //! this hands its process to [`serve_filtered_if_asked`] before anything else, as the
-//! `proton_sandboxed` binary does.
+//! `win_ter` binary does.
 
 #[cfg(feature = "cli")]
 pub mod cli;

@@ -1,4 +1,4 @@
-//! The command line, as a library: all the `proton_sandboxed` binary is, and what a program
+//! The command line, as a library: all the `win_ter` binary is, and what a program
 //! embedding it reuses rather than restating the flags.
 //!
 //! A run's arguments are [`RunArgs`]; [`run`] does the run and returns its exit status as a plain
@@ -27,10 +27,11 @@ use crate::{folders, game, proton};
 /// game can make no namespaces of its own. The GPU, controllers and sound reach it. Where CachyOS's
 /// game-performance (or Feral's GameMode) is installed, the game runs under it. A game another
 /// launcher has run (Steam, so far) can go on from that launcher's prefix: --prefix-continue runs it
-/// there, --take-ownership copies it into the game's own folder first. Options go before the .exe;
-/// what follows it is the game's.
+/// there, --take-ownership copies it into the game's own folder first. Options go before the .exe or
+/// after it: the game's own arguments start at the first word after it that isn't one — or after
+/// --, which keeps them from being read as options.
 #[derive(Parser, Debug)]
-#[command(name = "proton_sandboxed", version)]
+#[command(name = "win_ter", version)]
 pub struct Cli {
     #[command(flatten)]
     pub run: RunArgs,
@@ -74,17 +75,16 @@ pub struct RunArgs {
     /// steamapps/compatdata
     #[arg(long, value_name = "DIR")]
     pub prefix: Option<PathBuf>,
-    /// Copy the prefix another launcher made for this .exe (Steam's, so far) into the game's own
-    /// folder (the default one, or --prefix), then run the game there. Refused where that folder is
-    /// already there, or no launcher has a prefix for it; where several have, a numbered menu asks
-    /// which
-    #[arg(long, conflicts_with = "prefix_continue")]
-    pub take_ownership: bool,
     /// Run the game on the prefix another launcher made for this .exe (Steam's, so far), where it
-    /// is, as --prefix with its folder would; found as --take-ownership finds it, with the same menu
-    /// and the same refusals
+    /// is, as --prefix with its folder would. Refused where no launcher has a prefix for it; where
+    /// several have, a numbered menu asks which
     #[arg(long, conflicts_with = "prefix")]
     pub prefix_continue: bool,
+    /// Copy the prefix another launcher made for this .exe into the game's own folder (the default
+    /// one, or --prefix), then run the game there: found as --prefix-continue finds it, with the
+    /// same menu and the same refusals, and refused where that folder is already there
+    #[arg(long, conflicts_with = "prefix_continue")]
+    pub take_ownership: bool,
     /// Run without game-performance or GameMode, even where installed
     #[arg(long)]
     pub no_performance: bool,
@@ -93,7 +93,42 @@ pub struct RunArgs {
     pub dry_run: bool,
 }
 
-/// What a program running proton_sandboxed brings to a run.
+impl RunArgs {
+    /// The words that run it again, after a program's name — in one order, however it was typed:
+    /// the .exe first, so that sorted, the runs of a game and of the games beside it sit together;
+    /// then the options it has, in the order they are declared above (`--help`'s); then the game's
+    /// arguments, after `--` where the first starts with `-` and would be read as an option. A .exe
+    /// whose path starts with `-` is written from `./`, for the same reason.
+    pub fn words(&self) -> Vec<OsString> {
+        let exe = match self.exe.as_os_str().as_encoded_bytes().starts_with(b"-") {
+            true => Path::new(".").join(&self.exe),
+            false => self.exe.clone(),
+        };
+        let switch = |on: bool, flag: &str| on.then(|| vec![OsString::from(flag)]);
+        let valued = |flag: &str, value: &OsStr| vec![OsString::from(flag), value.to_os_string()];
+        let options = [
+            switch(self.xwayland, "--xwayland"),
+            switch(self.network, "--network"),
+            self.proton.as_ref().map(|proton| valued("--proton", proton.as_ref())),
+            self.game_dir.as_ref().map(|dir| valued("--game-dir", dir.as_ref())),
+            Some(self.allow.iter().flat_map(|dir| valued("--allow", dir.as_ref())).collect()),
+            self.prefix.as_ref().map(|dir| valued("--prefix", dir.as_ref())),
+            switch(self.prefix_continue, "--prefix-continue"),
+            switch(self.take_ownership, "--take-ownership"),
+            switch(self.no_performance, "--no-performance"),
+            switch(self.dry_run, "--dry-run"),
+        ];
+        let mut words = vec![exe.into_os_string()];
+        words.extend(options.into_iter().flatten().flatten());
+        if self.game_args.first().is_some_and(|arg| arg.starts_with('-')) {
+            words.push("--".into());
+        }
+        words.extend(self.game_args.iter().map(OsString::from));
+        words
+    }
+}
+
+/// What a program running win_ter brings to a run.
 pub struct Embedding<'a> {
     /// What the run's lines are signed with: the command's name.
     pub name: &'a str,
@@ -111,16 +146,16 @@ pub struct Embedding<'a> {
     /// system's python scripts, needing the system's python).
     pub off_path: &'a [PathBuf],
     /// Told that the game is about to start, once a run is ready — never for a dry run, nor a
-    /// refused one — with the run's arguments as it takes them, to run it again by from anywhere
-    /// ([`as_run`]).
+    /// refused one — with the run's arguments as it takes them, settled ([`as_run`]): to run it
+    /// again from anywhere, as [`RunArgs::words`] spells it.
     pub on_start: Option<&'a dyn Fn(&RunArgs)>,
 }
 
 impl Embedding<'static> {
-    /// Running on its own: lines signed `proton_sandboxed`, the system's Protons alone.
+    /// Running on its own: lines signed `win_ter`, the system's Protons alone.
     pub fn standalone() -> Self {
         Embedding {
-            name: "proton_sandboxed",
+            name: "win_ter",
             own_proton: None,
             own_proton_first: false,
             fetch_proton: None,
@@ -304,10 +339,11 @@ fn launch(args: &RunArgs, embedding: &Embedding) -> Result<u8, String> {
 }
 
 /// The run's arguments as it takes them, settled — its .exe, its game's folder, the folders allowed
-/// it and its own folder — to run it again by from anywhere: each path whole, links followed (the
-/// .exe the one found, where its folder was given); a Proton named by its folder, that folder so;
-/// and no `--take-ownership`, which a run again would be refused, the game's own folder there by
-/// then. What wasn't given stays so, and the game's arguments stay as they were.
+/// it and its own folder — to run it again from anywhere: each path whole, links followed (the .exe
+/// the one found, where its folder was given), and a Proton named by its folder, that folder so.
+/// What wasn't given stays so, and the rest is as given: `--take-ownership` too, though its copy is
+/// there by then, so that the same run again would be refused (a program keeping runs to repeat
+/// leaves it off).
 fn as_run(
     args: &RunArgs,
     exe: &Path,
@@ -325,8 +361,6 @@ fn as_run(
         allow: allowed.to_vec(),
         prefix: args.prefix.as_ref().map(|_| crate::canonical(prefix)),
         proton,
-        take_ownership: false,
-        dry_run: false,
         ..args.clone()
     }
 }
@@ -465,8 +499,8 @@ mod tests {
 
     /// A run, as told to the embedding program, holds the paths it settled on: the .exe, the folders
     /// allowed, and the game's folder and its own where they were given (its own followed through a
-    /// link), and a Proton's folder whole where one was named by it — a name stays a name. It holds
-    /// no --take-ownership, nor --dry-run; the rest is as given.
+    /// link), and a Proton's folder whole where one was named by it — a name stays a name. The rest
+    /// is as given, --take-ownership too.
     #[test]
     fn a_run_is_told_with_the_paths_it_settled_on() {
         let base = crate::proton::tests::scratch("as_run");
@@ -498,10 +532,10 @@ mod tests {
             allow: allowed.to_vec(),
             prefix: Some(crate::canonical(&prefixes)),
             proton: Some(crate::canonical(&protons).to_str().unwrap().to_string()),
-            take_ownership: false,
             ..given.clone()
         };
         assert_eq!(told, expected);
+        assert!(told.take_ownership);
 
         let bare = RunArgs {
             proton: Some("cachyos".into()),
@@ -518,5 +552,80 @@ mod tests {
         );
         assert!(told.prefix_continue);
         let _ = std::fs::remove_dir_all(&base);
+    }
+
+    /// A run with every option it can take at once (each of a conflicting pair aside), and
+    /// arguments for the game that look like options.
+    fn everything() -> RunArgs {
+        RunArgs {
+            exe: "/games/Baldur's Gate 3/bin/bg3.exe".into(),
+            game_args: vec!["--network".into(), "two words".into(), "--".into()],
+            xwayland: true,
+            network: true,
+            proton: Some("GE-Proton11-12".into()),
+            game_dir: Some("/games/Baldur's Gate 3".into()),
+            allow: vec!["/mods/a".into(), "/mods/b b".into()],
+            prefix: Some("/prefixes/bg3".into()),
+            prefix_continue: false,
+            take_ownership: true,
+            no_performance: true,
+            dry_run: true,
+        }
+    }
+
+    /// A run's words take the .exe first, then its options in the order they are declared —
+    /// `--help`'s — every option among them.
+    #[test]
+    fn a_runs_words_take_the_exe_first_then_the_options_as_declared() {
+        use clap::CommandFactory;
+        let declared: Vec<String> = Cli::command()
+            .get_arguments()
+            .filter_map(|arg| arg.get_long())
+            .filter(|long| !["help", "version"].contains(long))
+            .map(|long| format!("--{long}"))
+            .collect();
+        let all = RunArgs { prefix_continue: true, ..everything() };
+        let words: Vec<String> =
+            all.words().iter().map(|word| word.to_string_lossy().into_owned()).collect();
+        assert_eq!(words[0], "/games/Baldur's Gate 3/bin/bg3.exe");
+        let options = &words[1..words.iter().position(|word| word == "--").unwrap()];
+        let mut flags: Vec<&String> =
+            options.iter().filter(|word| word.starts_with("--")).collect();
+        flags.dedup(); // --allow, given twice
+        assert_eq!(flags, declared.iter().collect::<Vec<_>>());
+        assert_eq!(words[words.len() - 4..], ["--", "--network", "two words", "--"]);
+    }
+
+    /// A run's words read back as the very run: with no option and with every one, with a game's
+    /// arguments that look like options or are `--` (or the first doesn't, and a later one does),
+    /// and with paths that hold spaces and quotes. A .exe whose path starts with `-` reads back as
+    /// the same file, from `./`.
+    #[test]
+    fn a_runs_words_read_back_as_the_run() {
+        let bare = |exe: &str| Cli::try_parse_from(["win_ter", exe]).unwrap().run;
+        let continued = RunArgs {
+            prefix: None,
+            take_ownership: false,
+            prefix_continue: true,
+            game_args: vec!["-windowed".into()],
+            ..everything()
+        };
+        let later = RunArgs {
+            game_args: vec!["windowed".into(), "--network".into(), "-h".into()],
+            ..bare("/games/ice/Game.exe")
+        };
+        for given in [bare("/games/ice/Game.exe"), everything(), continued, later] {
+            let words = given.words();
+            let parsed =
+                Cli::try_parse_from(std::iter::once("win_ter".into()).chain(words.clone()))
+                    .unwrap_or_else(|err| panic!("{words:?}: {err}"));
+            assert_eq!(parsed.run, given, "{words:?}");
+        }
+        assert_eq!(bare("/games/ice/Game.exe").words(), ["/games/ice/Game.exe"]);
+
+        let dashed = Cli::try_parse_from(["win_ter", "--", "-game.exe"]).unwrap().run;
+        assert_eq!(dashed.exe, Path::new("-game.exe"));
+        let again = Cli::try_parse_from(std::iter::once("win_ter".into()).chain(dashed.words()));
+        assert_eq!(again.unwrap().run.exe, Path::new("./-game.exe"));
     }
 }

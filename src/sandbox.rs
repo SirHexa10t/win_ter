@@ -180,7 +180,7 @@ fn stdout_of(program: &str, args: &[&str]) -> Option<String> {
 }
 
 /// The sandbox's first step: the running program started again inside it
-/// (`PROGRAM --proton-sandboxed-filtered NAME COMMAND ARGS…`), which sets the syscall filter in
+/// (`PROGRAM --win-ter-filtered NAME COMMAND ARGS…`), which sets the syscall filter in
 /// place ([`seccomp`]) and becomes COMMAND — Proton's run, which the filter then holds for good;
 /// NAME is what its lines are signed with. Returns `false` straight away where this process wasn't
 /// started as that step; never returns otherwise. A filter that can't be set ends the process
@@ -358,10 +358,10 @@ fn passed_along(key: &str) -> bool {
 pub(crate) const RUN_SCRIPT: &str = r#"proton=$1; shift; "$proton/proton" waitforexitandrun "$@"; status=$?; "$proton/files/bin/wineserver" -w 2>/dev/null; exit $status"#;
 
 /// Where the running program is put in the sandbox, read-only, to set the syscall filter in place.
-const FILTER_IN_SANDBOX: &str = "/run/proton_sandboxed";
+const FILTER_IN_SANDBOX: &str = "/run/win_ter";
 /// What the running program is started with in the sandbox to set the syscall filter in place and
 /// run the rest of its arguments ([`serve_filtered_if_asked`]): a marker no command uses.
-const FILTERED_MARKER: &str = "--proton-sandboxed-filtered";
+const FILTERED_MARKER: &str = "--win-ter-filtered";
 /// The home the game sees, in its own folder.
 pub(crate) const HOME_DIR: &str = "home";
 /// The Steam client folder Proton is told of, in the game's own folder: empty, as there's no Steam

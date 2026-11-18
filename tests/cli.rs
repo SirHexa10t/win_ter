@@ -1,4 +1,4 @@
-//! The `proton_sandboxed` binary, run as a user runs it: against stand-in Protons (a script that
+//! The `win_ter` binary, run as a user runs it: against stand-in Protons (a script that
 //! reports what it sees) and stand-in homes, each a scratch folder of its own. The tests that start
 //! a real sandbox skip, saying so, where bubblewrap can't make one (no bwrap, or no user
 //! namespaces, as in some containers).
@@ -8,8 +8,7 @@ use std::process::{Command, Output, Stdio};
 
 /// A scratch folder for one test, standing in for a home: empty, gone afterwards.
 fn scratch_home(tag: &str) -> PathBuf {
-    let home =
-        std::env::temp_dir().join(format!("proton_sandboxed_cli_{tag}_{}", std::process::id()));
+    let home = std::env::temp_dir().join(format!("win_ter_cli_{tag}_{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&home);
     std::fs::create_dir_all(&home).unwrap();
     home
@@ -124,7 +123,7 @@ exit 7
     );
     fake_proton(&proton, "100 stand-in-proton", true, &script);
 
-    let out = Command::new(env!("CARGO_BIN_EXE_proton_sandboxed"))
+    let out = Command::new(env!("CARGO_BIN_EXE_win_ter"))
         .args(["--no-performance", "--proton"])
         .arg(&proton)
         .arg(game.join("game.exe"))
@@ -135,10 +134,10 @@ exit 7
         .env_remove("DISPLAY")
         .env_remove("XDG_CONFIG_HOME")
         .output()
-        .expect("run proton_sandboxed");
+        .expect("run win_ter");
     let said = String::from_utf8_lossy(&out.stderr);
     assert_eq!(out.status.code(), Some(7), "the game's status is the run's: {said}");
-    assert!(said.contains("proton_sandboxed: stand-in-proton on Wayland, network off"), "{said}");
+    assert!(said.contains("win_ter: stand-in-proton on Wayland, network off"), "{said}");
 
     let prefixes: Vec<PathBuf> = std::fs::read_dir(home.join("Games/manual_run_proton_prefixes"))
         .expect("the game's own folder is made under ~/Games/manual_run_proton_prefixes")
@@ -183,7 +182,7 @@ fn a_dry_run_says_what_would_run_and_what_cant_is_refused() {
     std::fs::write(game.join("game.exe"), "MZ").unwrap();
     fake_proton(&proton, "100 stand-in-proton", false, "#!/bin/sh\nexit 0\n");
     let run = |args: &[&str]| {
-        Command::new(env!("CARGO_BIN_EXE_proton_sandboxed"))
+        Command::new(env!("CARGO_BIN_EXE_win_ter"))
             .args(args)
             .env("HOME", &home)
             .env_remove("WAYLAND_DISPLAY")
@@ -198,7 +197,7 @@ fn a_dry_run_says_what_would_run_and_what_cant_is_refused() {
     assert!(printed.starts_with("bwrap --die-with-parent --new-session"), "{printed}");
     assert!(printed.contains("--unshare-net") && printed.trim_end().ends_with("-arg"), "{printed}");
     assert!(!home.join("Games").exists(), "a dry run makes nothing");
-    let relative = Command::new(env!("CARGO_BIN_EXE_proton_sandboxed"))
+    let relative = Command::new(env!("CARGO_BIN_EXE_win_ter"))
         .args(["--dry-run", "--no-performance", "--proton", "proton", "game/game.exe"])
         .current_dir(&home)
         .env("HOME", &home)
@@ -222,8 +221,7 @@ fn a_dry_run_says_what_would_run_and_what_cant_is_refused() {
     let missing = run(&["--proton", &proton, "/no/such/game.exe"]);
     assert_eq!(missing.status.code(), Some(1));
     assert!(
-        String::from_utf8_lossy(&missing.stderr)
-            .contains("proton_sandboxed: /no/such/game.exe is no file"),
+        String::from_utf8_lossy(&missing.stderr).contains("win_ter: /no/such/game.exe is no file"),
         "{missing:?}"
     );
     let elsewhere = run(&[
@@ -260,7 +258,7 @@ fn folders_too_broad_for_the_game_to_write_to_are_refused() {
         std::fs::write(home.join(exe), "MZ").unwrap();
     }
     let run = |args: &[&str]| {
-        let mut command = Command::new(env!("CARGO_BIN_EXE_proton_sandboxed"));
+        let mut command = Command::new(env!("CARGO_BIN_EXE_win_ter"));
         command
             .args(["--dry-run", "--no-performance", "--proton"])
             .arg(&proton)
@@ -313,7 +311,7 @@ fn a_run_goes_on_from_the_prefix_steam_made_or_says_why_not() {
     let (home, exe, steams, proton) = home_with_steam_prefix("past_prefix");
     fake_proton(&proton, "100 stand-in-proton", false, "#!/bin/sh\nexit 0\n");
     let run = |exe: &Path, args: &[&str]| {
-        Command::new(env!("CARGO_BIN_EXE_proton_sandboxed"))
+        Command::new(env!("CARGO_BIN_EXE_win_ter"))
             .args(["--dry-run", "--no-performance", "--proton"])
             .arg(&proton)
             .args(args)
@@ -431,7 +429,7 @@ fn taking_over_the_prefix_steam_made_runs_the_game_on_a_copy() {
         report.display()
     );
     fake_proton(&proton, "100 stand-in-proton", false, &script);
-    let out = Command::new(env!("CARGO_BIN_EXE_proton_sandboxed"))
+    let out = Command::new(env!("CARGO_BIN_EXE_win_ter"))
         .args(["--no-performance", "--take-ownership", "--proton"])
         .arg(&proton)
         .arg(&exe)
@@ -439,13 +437,10 @@ fn taking_over_the_prefix_steam_made_runs_the_game_on_a_copy() {
         .env_remove("WAYLAND_DISPLAY")
         .env_remove("DISPLAY")
         .output()
-        .expect("run proton_sandboxed");
+        .expect("run win_ter");
     let said = String::from_utf8_lossy(&out.stderr);
     assert!(out.status.success(), "{said}");
-    assert!(
-        said.contains("proton_sandboxed: copying Steam's prefix for itchio-Cirno-ice-shave"),
-        "{said}"
-    );
+    assert!(said.contains("win_ter: copying Steam's prefix for itchio-Cirno-ice-shave"), "{said}");
     let owned: Vec<PathBuf> = std::fs::read_dir(home.join("Games/manual_run_proton_prefixes"))
         .unwrap()
         .map(|entry| entry.unwrap().path())
@@ -482,7 +477,7 @@ fn with_no_proton_at_all_the_run_says_what_to_install() {
         .args(["--dev-bind", "/", "/"])
         .args(hidden.flat_map(|dir| ["--tmpfs", dir]))
         .arg("--")
-        .arg(env!("CARGO_BIN_EXE_proton_sandboxed"))
+        .arg(env!("CARGO_BIN_EXE_win_ter"))
         .arg("--no-performance")
         .arg(home.join("game/game.exe"))
         .env("HOME", &home)
@@ -493,9 +488,7 @@ fn with_no_proton_at_all_the_run_says_what_to_install() {
     let said = String::from_utf8_lossy(&out.stderr);
     assert_eq!(out.status.code(), Some(1), "{said}");
     assert!(
-        said.contains(
-            "proton_sandboxed: there's no Proton on this computer (Steam installs Valve's"
-        ),
+        said.contains("win_ter: there's no Proton on this computer (Steam installs Valve's"),
         "{said}"
     );
     assert!(!home.join("Games").exists(), "nothing made for a run that can't happen");

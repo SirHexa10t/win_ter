@@ -3,11 +3,11 @@
 Easily run a Windows app through your terminal. Uses Proton (no Steam needed) inside a sandbox.
 
 ```sh
-proton_sandboxed game.exe                      # the newest Proton, on Wayland, no network
-proton_sandboxed --network --xwayland game.exe
-proton_sandboxed --prefix-continue game.exe    # carry on with the saves Steam has for it
-proton_sandboxed --take-ownership game.exe     # copy those over to the game's own folder first
-proton_sandboxed --help
+win_ter game.exe                      # the newest Proton, on Wayland, no network
+win_ter --network --xwayland game.exe
+win_ter --prefix-continue game.exe    # carry on with the saves Steam has for it
+win_ter --take-ownership game.exe     # copy those over to the game's own folder first
+win_ter --help
 ```
 
 ## What the sandbox does
